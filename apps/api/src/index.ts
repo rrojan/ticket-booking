@@ -1,31 +1,60 @@
 import { env } from './config/env.js'
-import { closeConnection, verifyConnection } from './db/index.js'
-import { createServer } from './server.js'
+import { DB } from './db/index.js'
+import { Server } from './server.js'
 
-console.log('eee', env)
+class Application {
+  private server: Server | null = null
+  private readonly database = DB.getInstance()
 
-const start = async () => {
-  try {
-    await verifyConnection()
-    console.info('Database connected!!!')
+  async start(): Promise<void> {
+    try {
+      await this.database.verify()
+      console.info('DB connection successful')
 
-    const server = await createServer()
-    await server.listen({ host: env.HOST, port: Number(env.PORT) })
+      // Create and start server listening on port in Env
+      this.server = await Server.create()
+      await this.server.listen(env.HOST, Number(env.PORT))
 
-    console.info(`Server listening on http://${env.HOST}:${env.PORT}`)
-  } catch (err) {
-    console.error('Failed to start server:', err)
-    process.exit(1)
+      console.info(`Environment: ${env.NODE_ENV}`)
+      console.info(`\n\nServer listening on http://${env.HOST}:${env.PORT}`)
+    } catch (error) {
+      console.error('Failed to start application:', error)
+      process.exit(1)
+    }
+  }
+
+  async shutdown(): Promise<void> {
+    console.info('Shutting down app...')
+
+    try {
+      if (this.server) {
+        await this.server.close()
+        console.info('Server closed')
+      }
+
+      await this.database.close()
+      console.info('DB connections closed')
+
+      console.info('Shutdown complete')
+      process.exit(0)
+    } catch (error) {
+      console.error('Error during shutdow!!', error)
+      process.exit(1)
+    }
+  }
+
+  // Register signal handlers for cleaner handling
+  registerSignalHandlers(): void {
+    const signals: NodeJS.Signals[] = ['SIGTERM', 'SIGINT']
+
+    for (const signal of signals) {
+      process.on(signal, () => this.shutdown())
+    }
   }
 }
 
-const stopApp = async () => {
-  console.info('Shutting down...')
-  await closeConnection()
-  process.exit(0)
-}
+// Bootstrap application
+const app = new Application()
+app.registerSignalHandlers()
 
-process.on('SIGTERM', stopApp)
-process.on('SIGINT', stopApp)
-
-start()
+app.start()
