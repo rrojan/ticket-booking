@@ -3,8 +3,8 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { getConcert } from '@/lib/api'
 import { TicketTierCard } from '@/components/TicketTierCard'
+import { BookingForm } from '@/components/BookingForm'
 import { formatDate } from '@/lib/utils'
-import { Booking } from '@/components/Booking'
 
 interface ConcertPageProps {
   params: Promise<{ id: string }>
@@ -111,7 +111,7 @@ const ConcertPage = async ({ params }: ConcertPageProps) => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {concert.ticketTiers.map((tier) => (
             <TicketTierCard key={tier.id} tier={tier}>
-              <Booking tier={tier} />
+              <BookingForm tier={tier} />
             </TicketTierCard>
           ))}
         </div>
