@@ -1,6 +1,6 @@
 import { db } from '../db/index.js'
 import { bookings, ticketTiers } from '../db/schema/index.js'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { BookingsRepository } from '../repositories/bookings.repository.js'
 
 export class BookingsService {
@@ -206,5 +206,65 @@ export class BookingsService {
    */
   async getBookingByIdempotencyKey(idempotencyKey: string) {
     return await this.bookingsRepo.findByIdempotencyKey(idempotencyKey)
+  }
+
+  /**
+   * Release tickets back to inventory (compensating transaction)
+   *
+   * This method is called when:
+   * 1. A booking payment fails
+   * 2. A user cancels their booking
+   * 3. A booking expires
+   */
+  async releaseTickets(bookingId: string, reason: 'PAYMENT_FAILED' | 'CANCELLED' | 'EXPIRED') {
+    try {
+      await db.transaction(async (tx) => {
+        // Setp 1: Get booking details
+        const [booking] = await tx
+          .select()
+          .from(bookings)
+          .where(eq(bookings.id, bookingId))
+          .limit(1)
+
+        if (!booking) {
+          throw new Error('Booking not found')
+        }
+
+        // Only release tickets if booking is in PENDING or CONFIRMED state
+        if (booking.status === 'FAILED' || booking.status === 'CANCELLED') {
+          throw new Error('Booking already released')
+        }
+
+        // Step 2: Update booking status
+        const newStatus = reason === 'CANCELLED' ? 'CANCELLED' : 'FAILED'
+        await tx
+          .update(bookings)
+          .set({
+            status: newStatus,
+            paymentStatus: reason === 'PAYMENT_FAILED' ? 'FAILED' : booking.paymentStatus,
+            updatedAt: new Date(),
+          })
+          .where(eq(bookings.id, bookingId))
+
+        // Step 3: Release tickets back to inventory
+        await tx
+          .update(ticketTiers)
+          .set({
+            availableQuantity: sql`${ticketTiers.availableQuantity} + ${booking.quantity}`,
+            updatedAt: new Date(),
+          })
+          .where(eq(ticketTiers.id, booking.ticketTierId))
+      })
+
+      return {
+        success: true,
+        message: `Tickets released successfully: ${reason}`,
+      }
+    } catch (error) {
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to release tickets',
+      }
+    }
   }
 }
