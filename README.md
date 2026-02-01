@@ -324,6 +324,14 @@ GET /bookings/:userId
 Get user's booking history
 **Response**: `BookingWithDetails[]` (includes concert and tier info via JOIN)
 
+# Testing
+
+I was not able to include testing due to time constraints. However, I would have included:
+
+- Integration tests for each endpoint
+- E2E tests for the entire booking flow using something like playwright etc.
+- Load tests to simulate high traffic via something like k6 etc. K6 also can be hooked to k6 cloud / grafana that allows us to visualize the load test results in a nice dashboard. k6 stories can be chained to stress test the system for various high-traffic scenarios, and we can also run queries to determine if the end ticket inventory is correct. This would be a great addition if I had more time.
+
 # Scaling to Non-Functional Requirements
 
 ## Scaling to 99.99% Availability (Four Nines)
