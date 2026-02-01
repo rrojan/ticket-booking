@@ -12,7 +12,7 @@ export async function createServer(): Promise<FastifyInstance> {
     logger: {
       level: env.LOG_LEVEL || 'info',
       transport:
-        process.env.NODE_ENV === 'development'
+        env.NODE_ENV === 'development'
           ? {
               target: 'pino-pretty',
               options: {
