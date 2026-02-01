@@ -10,6 +10,10 @@ interface ConcertPageProps {
   params: Promise<{ id: string }>
 }
 
+// Disable caching to ensure fresh ticket availability
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 export const generateMetadata = async ({ params }: ConcertPageProps): Promise<Metadata> => {
   const { id } = await params
 

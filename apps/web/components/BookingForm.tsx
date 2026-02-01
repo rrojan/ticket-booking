@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import type { TicketTier, CreateBookingResponse } from '@repo/shared-types'
 import { useUserId } from '@/hooks/useUserId'
 import { useIdempotencyKey } from '@/hooks/useIdempotencyKey'
@@ -17,6 +18,7 @@ interface BookingFormProps {
 type BookingState = 'idle' | 'loading' | 'success' | 'error'
 
 export const BookingForm = ({ tier, onSuccess }: BookingFormProps) => {
+  const router = useRouter()
   const userId = useUserId()
   const { key: idempotencyKey, regenerate } = useIdempotencyKey()
 
@@ -50,16 +52,19 @@ export const BookingForm = ({ tier, onSuccess }: BookingFormProps) => {
           setState('success')
           setBookingResult(result)
           onSuccess?.(result)
+
+          // Refresh the page data to show updated ticket availability
+          router.refresh()
         } else {
           setState('error')
-          setError(result.message || 'Booking failed. Please try again.')
+          setError('Booking failed. Please try again.')
         }
       } catch (err) {
         setState('error')
         setError(err instanceof Error ? err.message : 'An unexpected error occurred')
       }
     },
-    [userId, tier.id, quantity, idempotencyKey, isSoldOut, onSuccess]
+    [userId, tier.id, quantity, idempotencyKey, isSoldOut, onSuccess, router]
   )
 
   const handleRetry = useCallback(() => {
@@ -80,11 +85,10 @@ export const BookingForm = ({ tier, onSuccess }: BookingFormProps) => {
               {bookingResult.booking.quantity === 1 ? 'ticket' : 'tickets'}
             </p>
             <p>
-              <span className="font-medium">Total:</span> {formatPrice(bookingResult.booking.totalPrice)}
+              <span className="font-medium">Total:</span>{' '}
+              {formatPrice(bookingResult.booking.totalPrice)}
             </p>
-            <p className="text-text-muted mt-2">
-              Check your bookings page for more details.
-            </p>
+            <p className="text-text-muted mt-2">Check your bookings page for more details.</p>
           </div>
         </div>
         <Button onClick={handleRetry} variant="outline" className="w-full">
@@ -133,11 +137,7 @@ export const BookingForm = ({ tier, onSuccess }: BookingFormProps) => {
         )}
       </div>
 
-      {!userId && (
-        <p className="text-xs text-text-muted text-center">
-          Loading...
-        </p>
-      )}
+      {!userId && <p className="text-xs text-text-muted text-center">Loading...</p>}
     </form>
   )
 }

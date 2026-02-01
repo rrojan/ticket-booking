@@ -6,6 +6,10 @@ export const metadata: Metadata = {
   title: 'Upcoming Concerts',
 }
 
+// Disable caching to ensure fresh data after bookings
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 const ConcertsPage = async () => {
   const concerts = await getConcerts()
 
