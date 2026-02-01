@@ -2,25 +2,34 @@ import { db } from '../db/index.js'
 import { bookings, ticketTiers } from '../db/schema/index.js'
 import { eq } from 'drizzle-orm'
 import { BookingsRepository } from '../repositories/bookings.repository.js'
-import { TicketTiersRepository } from '../repositories/ticket-tiers.repository.js'
 
 export class BookingsService {
   private bookingsRepo: BookingsRepository
-  private ticketTiersRepo: TicketTiersRepository
 
   constructor() {
     this.bookingsRepo = new BookingsRepository()
-    this.ticketTiersRepo = new TicketTiersRepository()
   }
 
   /**
-   * Creates a new booking
+   * Creates a new booking with full transaction support
    *
-   * Concurrency plan:
+   * CRITICAL CONCURRENCY STRATEGY:
    * This method implements pessimistic locking using PostgreSQL's SELECT FOR UPDATE
    * to prevent double-booking and overselling in race conditions
    *
+   * Core flow:
+   * 1. Check idempotency key - return existing booking if found
+   * 2. BEGIN TRANSACTION for booking creation
+   * 3. SELECT FOR UPDATE - Locks the ticket_tier row
+   * 4. Validate availability
+   * 5. INSERT booking with ON CONFLICT DO NOTHING (backup idempotency check)
+   * 6. UPDATE ticket_tier to decrement available_quantity
+   * 7. Simulate payment
+   * 8. Update booking status based on payment result(!)
+   * 9. COMMIT or ROLLBACK
+   *
    * Race condition handling:
+   * - Multiple users booking same tier: FOR UPDATE creates a queue, processes serially (pg internals)
    * - Network retries: Idempotency key prevents duplicate bookings
    * - Overselling: CHECK constraint prevents negative available_quantity
    */
@@ -30,9 +39,9 @@ export class BookingsService {
     quantity: number,
     idempotencyKey: string
   ) {
-    // Check if booking already exists with this idempotency key
+    // STEP 1: Check if booking already exists with this idempotency key
+    // This handles network retries - return the existing booking instead of creating duplicate
     const existingBooking = await this.bookingsRepo.findByIdempotencyKey(idempotencyKey)
-    console.log('ebbbbbbb', existingBooking)
     if (existingBooking) {
       return {
         success: true,
@@ -41,24 +50,24 @@ export class BookingsService {
       }
     }
 
-    // ----------
-
-    // Execute booking transaction with row-level locking
+    // STEP 2-9: Execute booking transaction with row-level locking
     const result = await db.transaction(async (tx) => {
-      // Lock the ticket tier row using SELECT FOR UPDATE
+      // STEP 3: Lock the ticket tier row using SELECT FOR UPDATE
+      // This is CRITICAL for preventing race conditions
+      // - Blocks other transactions from reading/updating this row until we commit
+      // - Creates a queue internally and concurrent requests wait their turn (might affect qps tho??)
+      // - Guarantees serializable access to ticket inventory
       const [lockedTier] = await tx
         .select()
         .from(ticketTiers)
         .where(eq(ticketTiers.id, ticketTierId))
-        .for('update') // Drizzle provides good support for iSELETE FOR UPDATE
+        .for('update') // Drizzle provides good support for SELECT FOR UPDATE
 
       if (!lockedTier) {
         throw new Error('Ticket tier not found')
       }
 
-      console.log('ltt', lockedTier)
-
-      // Validate availability
+      // STEP 4: Validate availability
       if (lockedTier.availableQuantity < quantity) {
         throw new Error(
           `Insufficient tickets. Requested: ${quantity}, Available: ${lockedTier.availableQuantity}`
@@ -68,9 +77,7 @@ export class BookingsService {
       // Calculate total price
       const totalPrice = (parseFloat(lockedTier.price) * quantity).toFixed(2)
 
-      console.log('tpmeowmeowmeowmow', totalPrice)
-
-      // Insert booking record with idempotency protection
+      // STEP 5: Insert booking record with idempotency protection
       // ON CONFLICT DO NOTHING: If another concurrent request with same idempotency key
       // somehow got past our pre-check, this prevents duplicate inserts at DB level
       const bookingResult = await tx
@@ -84,9 +91,11 @@ export class BookingsService {
           paymentStatus: 'PENDING',
           idempotencyKey,
         })
-        .returning() // TODO: only return needed fields
+        .onConflictDoNothing({ target: bookings.idempotencyKey })
+        .returning() // TODO: only select / return needed fields
 
-      const newBooking = bookingResult[0]
+      // If ON CONFLICT was triggered, the booking already exists - fetch it
+      let newBooking = bookingResult[0]
       if (!newBooking) {
         const existing = await tx
           .select()
@@ -95,12 +104,13 @@ export class BookingsService {
           .limit(1)
 
         if (existing[0]) {
+          // Booking was created by concurrent request, return it
           throw new Error('CONCURRENT_BOOKING_EXISTS')
         }
         throw new Error('Failed to create booking')
       }
 
-      // Atomically decrement available tickets count
+      // STEP 6: Atomically decrement available tickets count
       const newAvailableQuantity = lockedTier.availableQuantity - quantity
       await tx
         .update(ticketTiers)
@@ -110,14 +120,13 @@ export class BookingsService {
         })
         .where(eq(ticketTiers.id, ticketTierId))
 
-      console.log('newAvail', newAvailableQuantity)
-
-      // Simulate payment processing
+      // STEP 7: Simulate payment processing
       const paymentSuccess = this.simulatePayment()
 
-      // Update booking status based on payment result
+      // STEP 8: Update booking status based on payment result
       if (paymentSuccess) {
         console.log('success!!!!')
+
         await tx
           .update(bookings)
           .set({
@@ -138,15 +147,26 @@ export class BookingsService {
         await tx
           .update(ticketTiers)
           .set({
-            availableQuantity: lockedTier.availableQuantity,
+            availableQuantity: lockedTier.availableQuantity, // Restore original quantity
             updatedAt: new Date(),
           })
           .where(eq(ticketTiers.id, ticketTierId))
 
-        throw new Error('Payment failed')
+        // Mark booking as faile
+        await tx
+          .update(bookings)
+          .set({
+            status: 'FAILED',
+            paymentStatus: 'FAILED',
+            updatedAt: new Date(),
+          })
+          .where(eq(bookings.id, newBooking.id))
+
+        throw new Error('Payment failed!')
       }
     })
 
+    // STEP 9: Transaction committed successfully
     return {
       success: true,
       booking: result,
@@ -159,8 +179,10 @@ export class BookingsService {
    *
    * For testing purposes, we randomly succeed/fail to simulate different scenarios
    * Currently its 80% chance of success
+   *
+   * @returns true if payment succeeds, else false
    */
-  private simulatePayment() {
+  private simulatePayment(): boolean {
     // 80% success rate for testing
     return Math.random() > 0.2
   }
