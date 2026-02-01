@@ -1,8 +1,6 @@
 # TicketBook
 
-> A full-stack ticket booking system for concerts and events built with NextJS & Fastify.
-
-This project demonstrates robust concurrency handling, prevents double booking (via pessimistic locking), ensures data integrity through proper transaction management - and all this while maintaining high availability and performance at scale!
+> A full-stack ticket booking system for concerts built with NextJS & Fastify
 
 ### Core Features
 
@@ -30,3 +28,77 @@ This project demonstrates robust concurrency handling, prevents double booking (
 - **Node.js** >= 18 (v22 preferred)
 - **pnpm** 10.28.2 (package manager)
 - **Docker** (for PostgreSQL 18.1 database)
+
+## Setup Steps
+
+1. Clone the repository
+
+```sh
+git clone git@github.com:rrojan/ticket-booking.git
+```
+
+2. Install dependencies
+
+```sh
+pnpm i
+```
+
+This will install dependencies for all apps / packages in the monorepo
+
+3. Copy environment files
+
+````sh
+cp apps/api/.env.example apps/api.env && cp apps/web/.env.example apps/web.env && cp docker/.env.example docker/.env
+
+4. Run DB & migrations
+
+```sh
+pnpm db:up # Make sure 5433 is available, else change the port in docker/.env
+````
+
+4. Run migrations & seed data
+
+```sh
+cd apps/api
+pnpm db:migrate
+pnpm db:seed
+cd ../.. # go back to root of monorepo
+```
+
+5. Start the development servers
+
+```sh
+# From root of monorepo
+pnpm dev
+# OR
+turbo dev
+
+# OR start individual apps
+pnpm --filter=api dev # Run API  only
+pnpm --filter=web dev # Run Next app only
+```
+
+You can now browse the frontend app at http://localhost:3000/, API at http://localhost:3001 and DB (Postgres)
+
+## Build Instructions
+
+1. Run `pnpm build` to build all apps from the root of the monorepo
+
+### All Available Scripts
+
+```bash
+# Development
+pnpm dev              # Start all apps in development mode
+pnpm build            # Build all apps for production
+pnpm lint             # Lint all code (0 warnings enforced)
+pnpm check-types      # TypeScript type checking
+
+# Database
+pnpm db:up            # Start PostgreSQL container
+pnpm db:down          # Stop PostgreSQL container
+cd apps/api && pnpm db:studio  # Open Drizzle Studio (visual DB editor)
+
+# Individual apps
+pnpm --filter=api dev     # Run API server only
+pnpm --filter=web dev     # Run Next.js app only
+```
