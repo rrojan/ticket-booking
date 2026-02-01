@@ -1,11 +1,12 @@
+import { env } from './config/env.js'
 import { createServer } from './server.js'
 
 const start = async () => {
   try {
     const server = await createServer()
-    await server.listen({ host: process.env.HOST, port: Number(process.env.PORT) })
+    await server.listen({ host: env.HOST, port: Number(env.PORT) })
 
-    console.info(`Server listening on http://${process.env.HOST}:${process.env.PORT}`)
+    console.info(`Server listening on http://${env.HOST}:${env.PORT}`)
   } catch (err) {
     console.error('Failed to start server:', err)
     process.exit(1)
