@@ -1,6 +1,25 @@
-import { integer, numeric, pgTable, text, timestamp, uuid, check } from 'drizzle-orm/pg-core'
+import {
+  integer,
+  numeric,
+  pgTable,
+  timestamp,
+  uuid,
+  check,
+  pgEnum,
+  unique,
+} from 'drizzle-orm/pg-core'
 import { concerts } from './concerts.schema.js'
 import { sql } from 'drizzle-orm'
+
+/**
+ * Tier Type Enum
+ *
+ * Defines the three pricing tiers available for our concerts:
+ * - VIP: $100
+ * - FRONT_ROW: $50
+ * - GA: $10
+ */
+export const tierTypeEnum = pgEnum('tier_type', ['VIP', 'FRONT_ROW', 'GA'])
 
 /**
  * Ticket Tiers Table
@@ -33,7 +52,7 @@ export const ticketTiers = pgTable(
     concertId: uuid()
       .notNull()
       .references(() => concerts.id, { onDelete: 'cascade' }),
-    name: text().notNull(),
+    tierType: tierTypeEnum().notNull(),
     price: numeric({ precision: 10, scale: 2 }).notNull(),
     totalQuantity: integer().notNull(),
     availableQuantity: integer().notNull(),
@@ -48,5 +67,7 @@ export const ticketTiers = pgTable(
       'total_quantity_check',
       sql`${table.availableQuantity} <= ${table.totalQuantity}`
     ),
+    // Ensures each concert can only have one tier of each type
+    concertTierUnique: unique('concert_tier_unique').on(table.concertId, table.tierType),
   })
 )

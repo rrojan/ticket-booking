@@ -1,4 +1,13 @@
-import { integer, pgTable, text, timestamp, uuid, index, pgEnum } from 'drizzle-orm/pg-core'
+import {
+  integer,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+  index,
+  pgEnum,
+  numeric,
+} from 'drizzle-orm/pg-core'
 import { ticketTiers } from './ticket-tiers.schema.js'
 
 /**
@@ -7,8 +16,19 @@ import { ticketTiers } from './ticket-tiers.schema.js'
  * - PENDING: Booking created, payment processing
  * - CONFIRMED: Payment successful, tickets reserved
  * - FAILED: Payment failed, tickets released back to inventory
+ * - CANCELLED: Booking cancelled by user
  */
-export const bookingStatusEnum = pgEnum('booking_status', ['PENDING', 'CONFIRMED', 'FAILED'])
+export const bookingStatusEnum = pgEnum('booking_status', [
+  'PENDING',
+  'CONFIRMED',
+  'FAILED',
+  'CANCELLED',
+])
+
+/**
+ * Payment Status Enum
+ */
+export const paymentStatusEnum = pgEnum('payment_status', ['PENDING', 'SUCCESS', 'FAILED'])
 
 /**
  * Bookings Table
@@ -40,7 +60,9 @@ export const bookings = pgTable(
       .notNull()
       .references(() => ticketTiers.id, { onDelete: 'cascade' }),
     quantity: integer().notNull(),
+    totalPrice: numeric({ precision: 10, scale: 2 }).notNull(),
     status: bookingStatusEnum().notNull().default('PENDING'),
+    paymentStatus: paymentStatusEnum().notNull().default('PENDING'),
     // Idempotency key prevents duplicate bookings from network retries
     // Client generates UUID and includes in every request
     idempotencyKey: text().notNull().unique(),

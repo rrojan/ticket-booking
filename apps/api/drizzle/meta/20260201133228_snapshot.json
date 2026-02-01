@@ -1,5 +1,5 @@
 {
-  "id": "e989f8cd-453d-4cac-a9a8-4481a4f2026a",
+  "id": "099abbe3-e9d6-464f-ac16-216360093367",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -33,9 +33,23 @@
           "primaryKey": false,
           "notNull": true
         },
+        "total_price": {
+          "name": "total_price",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
         "status": {
           "name": "status",
           "type": "booking_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'PENDING'"
+        },
+        "payment_status": {
+          "name": "payment_status",
+          "type": "payment_status",
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": true,
@@ -204,9 +218,10 @@
           "primaryKey": false,
           "notNull": true
         },
-        "name": {
-          "name": "name",
-          "type": "text",
+        "tier_type": {
+          "name": "tier_type",
+          "type": "tier_type",
+          "typeSchema": "public",
           "primaryKey": false,
           "notNull": true
         },
@@ -260,7 +275,16 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "concert_tier_unique": {
+          "name": "concert_tier_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "concert_id",
+            "tier_type"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {
         "available_quantity_check": {
@@ -282,7 +306,26 @@
       "values": [
         "PENDING",
         "CONFIRMED",
+        "FAILED",
+        "CANCELLED"
+      ]
+    },
+    "public.payment_status": {
+      "name": "payment_status",
+      "schema": "public",
+      "values": [
+        "PENDING",
+        "SUCCESS",
         "FAILED"
+      ]
+    },
+    "public.tier_type": {
+      "name": "tier_type",
+      "schema": "public",
+      "values": [
+        "VIP",
+        "FRONT_ROW",
+        "GA"
       ]
     }
   },
