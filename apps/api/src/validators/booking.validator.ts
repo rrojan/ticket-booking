@@ -1,4 +1,5 @@
 import z from 'zod'
+import type { CreateBookingRequest } from '@repo/shared-types'
 
 /**
  * Booking creation request schema
@@ -17,9 +18,9 @@ export const createBookingSchema = z.object({
     .min(1, 'Minimum quantity is 1')
     .max(10, 'Maximum quantity is 10 tickets per booking'),
   idempotencyKey: z.uuid('Invalid idempotency key format (must be uuid)'),
-})
+}) satisfies z.ZodType<CreateBookingRequest>
 
-export type CreateBookingRequest = z.infer<typeof createBookingSchema>
+export type { CreateBookingRequest }
 
 /**
  * Bookings user request schema

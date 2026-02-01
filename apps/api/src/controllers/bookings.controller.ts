@@ -1,6 +1,12 @@
 import { type FastifyRequest, type FastifyReply } from 'fastify'
+import type {
+  ApiResponse,
+  CreateBookingRequest,
+  CreateBookingResponse,
+  BookingWithDetails,
+} from '@repo/shared-types'
 import { BookingsService } from '../services/bookings.service.js'
-import { createBookingSchema, type CreateBookingRequest } from '../validators/booking.validator.js'
+import { createBookingSchema } from '../validators/booking.validator.js'
 
 export class BookingsController {
   private bookingsService: BookingsService
@@ -12,7 +18,10 @@ export class BookingsController {
   /**
    * Create a new booking with concurrency protection
    */
-  async createBooking(request: FastifyRequest, reply: FastifyReply) {
+  async createBooking(
+    request: FastifyRequest<{ Body: CreateBookingRequest }>,
+    reply: FastifyReply<{ Reply: CreateBookingResponse }>
+  ) {
     try {
       const validationResult = createBookingSchema.safeParse(request.body)
 
@@ -24,9 +33,8 @@ export class BookingsController {
         }))
         return reply.status(400).send({
           success: false,
-          error: 'Validation error',
-          message: 'Invalid request body',
-          details: errorDetails,
+          booking: null,
+          message: `Validation error: ${errorDetails.map((d) => d.message).join(', ')}`,
         })
       }
 
@@ -41,54 +49,34 @@ export class BookingsController {
       )
 
       if (result.success) {
-        return reply.status(200).send({
-          success: true,
-          data: result.booking,
-          message: result.message,
-        })
+        return reply.status(200).send(result)
       }
 
-      // Handle different failure scenarios with appropriate status codes (TODO: clean all this later )
+      // Handle different failure scenarios with appropriate status codes
       const errorMessage = result.message.toLowerCase()
 
       // Insufficient tickets (handle race condition)
       if (errorMessage.includes('insufficient')) {
-        return reply.status(409).send({
-          success: false,
-          error: 'Conflict',
-          message: result.message,
-        })
+        return reply.status(409).send(result)
       }
 
       // Ticket tier not found
       if (errorMessage.includes('not found')) {
-        return reply.status(404).send({
-          success: false,
-          error: 'Not found',
-          message: result.message,
-        })
+        return reply.status(404).send(result)
       }
 
       // Payment failed
       if (errorMessage.includes('payment failed')) {
-        return reply.status(402).send({
-          success: false,
-          error: 'Payment failed',
-          message: result.message,
-        })
+        return reply.status(402).send(result)
       }
 
       // Generic failure
-      return reply.status(500).send({
-        success: false,
-        error: 'Booking failed',
-        message: result.message,
-      })
+      return reply.status(500).send(result)
     } catch (error) {
       request.log.error(error, 'Error creating booking')
       return reply.status(500).send({
         success: false,
-        error: 'Server error',
+        booking: null,
         message: error instanceof Error ? error.message : 'Unknown error',
       })
     }
@@ -99,7 +87,7 @@ export class BookingsController {
    */
   async getUserBookings(
     request: FastifyRequest<{ Params: { userId: string } }>,
-    reply: FastifyReply
+    reply: FastifyReply<{ Reply: ApiResponse<BookingWithDetails[]> }>
   ) {
     try {
       const { userId } = request.params
@@ -107,8 +95,8 @@ export class BookingsController {
       if (!userId || userId.trim() === '') {
         return reply.status(400).send({
           success: false,
-          error: 'Validation error',
-          message: 'User ID is required',
+          data: [],
+          error: 'User ID is required',
         })
       }
 
@@ -123,8 +111,8 @@ export class BookingsController {
       request.log.error(error, 'Error fetching user bookings')
       return reply.status(500).send({
         success: false,
-        error: 'Failed to fetch bookings',
-        message: error instanceof Error ? error.message : 'Unknown error',
+        data: [],
+        error: error instanceof Error ? error.message : 'Unknown error',
       })
     }
   }

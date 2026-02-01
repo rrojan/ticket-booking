@@ -1,3 +1,4 @@
+import type { ConcertWithAvailability, ConcertWithTiers } from '@repo/shared-types'
 import { ConcertsRepository } from '../repositories/concerts.repository.js'
 import { TicketTiersRepository } from '../repositories/ticket-tiers.repository.js'
 
@@ -11,17 +12,21 @@ export class ConcertsService {
   }
 
   /**
-   * Get all concerts with availability inof
+   * Get all concerts with availability info
    */
-  async getAllConcerts() {
-    return await this.concertsRepo.findAllWithAvailability()
+  async getAllConcerts(): Promise<ConcertWithAvailability[]> {
+    const concerts = await this.concertsRepo.findAllWithAvailability()
+    // Type assertion: Drizzle returns Date objects, but they serialize to ISO strings over HTTP
+    return concerts as unknown as ConcertWithAvailability[]
   }
 
   /**
    * Get a single concert by ID with ticket tiers
    */
-  async getConcertById(concertId: string) {
-    return await this.concertsRepo.findWithTicketTiers(concertId)
+  async getConcertById(concertId: string): Promise<ConcertWithTiers | null> {
+    const concert = await this.concertsRepo.findWithTicketTiers(concertId)
+    if (!concert) return null
+    return concert as unknown as ConcertWithTiers
   }
 
   /**
@@ -38,7 +43,7 @@ export class ConcertsService {
       concertId: concert.id,
       concertName: concert.name,
       tiers: tiers.map((tier) => ({
-        id: tier.id,
+        tierId: tier.id,
         tierType: tier.tierType,
         price: tier.price,
         availableQuantity: tier.availableQuantity,

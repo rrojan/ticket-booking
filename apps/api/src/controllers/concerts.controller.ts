@@ -1,4 +1,10 @@
 import { type FastifyRequest, type FastifyReply } from 'fastify'
+import type {
+  ApiResponse,
+  ConcertWithAvailability,
+  ConcertWithTiers,
+  TierAvailability,
+} from '@repo/shared-types'
 import { ConcertsService } from '../services/concerts.service.js'
 
 export class ConcertsController {
@@ -13,7 +19,10 @@ export class ConcertsController {
    *
    * Get all concerts with availability info
    */
-  async getAllConcerts(request: FastifyRequest, reply: FastifyReply) {
+  async getAllConcerts(
+    request: FastifyRequest,
+    reply: FastifyReply<{ Reply: ApiResponse<ConcertWithAvailability[]> }>
+  ) {
     try {
       const concerts = await this.concertsService.getAllConcerts()
 
@@ -26,8 +35,8 @@ export class ConcertsController {
       request.log.error(error, 'Error fetching concerts')
       return reply.status(500).send({
         success: false,
+        data: [],
         error: 'Failed to fetch concerts',
-        message: error instanceof Error ? error.message : 'Unknown error',
       })
     }
   }
@@ -39,7 +48,7 @@ export class ConcertsController {
    */
   async getConcertById(
     request: FastifyRequest<{ Params: { concertId: string } }>,
-    reply: FastifyReply
+    reply: FastifyReply<{ Reply: ApiResponse<ConcertWithTiers> }>
   ) {
     try {
       const { concertId } = request.params
@@ -49,8 +58,8 @@ export class ConcertsController {
       if (!concert) {
         return reply.status(404).send({
           success: false,
-          error: 'Concert not found',
-          message: `No concert found with ID: ${concertId}`,
+          data: {} as ConcertWithTiers,
+          error: `No concert found with ID: ${concertId}`,
         })
       }
 
@@ -62,8 +71,8 @@ export class ConcertsController {
       request.log.error(error, 'Error fetching concert by ID')
       return reply.status(500).send({
         success: false,
+        data: {} as ConcertWithTiers,
         error: 'Failed to fetch concert',
-        message: error instanceof Error ? error.message : 'Unknown error',
       })
     }
   }
@@ -75,7 +84,13 @@ export class ConcertsController {
    */
   async getConcertAvailability(
     request: FastifyRequest<{ Params: { concertId: string } }>,
-    reply: FastifyReply
+    reply: FastifyReply<{
+      Reply: ApiResponse<{
+        concertId: string
+        concertName: string
+        tiers: TierAvailability[]
+      }>
+    }>
   ) {
     try {
       const { concertId } = request.params
@@ -85,8 +100,8 @@ export class ConcertsController {
       if (!availability) {
         return reply.status(404).send({
           success: false,
-          error: 'Concert not found',
-          message: `No concert found with ID: ${concertId}`,
+          data: { concertId: '', concertName: '', tiers: [] },
+          error: `No concert found with ID: ${concertId}`,
         })
       }
 
@@ -98,8 +113,8 @@ export class ConcertsController {
       request.log.error(error, 'Error fetching concert availability')
       return reply.status(500).send({
         success: false,
+        data: { concertId: '', concertName: '', tiers: [] },
         error: 'Failed to fetch concert availability',
-        message: error instanceof Error ? error.message : 'Unknown error',
       })
     }
   }

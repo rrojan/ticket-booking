@@ -1,3 +1,4 @@
+import type { Booking, CreateBookingResponse } from '@repo/shared-types'
 import { db } from '../db/index.js'
 import { bookings, ticketTiers } from '../db/schema/index.js'
 import { eq, sql } from 'drizzle-orm'
@@ -38,14 +39,14 @@ export class BookingsService {
     ticketTierId: string,
     quantity: number,
     idempotencyKey: string
-  ) {
+  ): Promise<CreateBookingResponse> {
     // STEP 1: Check if booking already exists with this idempotency key
     // This handles network retries - return the existing booking instead of creating duplicate
     const existingBooking = await this.bookingsRepo.findByIdempotencyKey(idempotencyKey)
     if (existingBooking) {
       return {
         success: true,
-        booking: existingBooking,
+        booking: existingBooking as unknown as Booking,
         message: 'Booking already exists (idempotency key matched)',
       }
     }
@@ -167,7 +168,7 @@ export class BookingsService {
       // STEP 9: Transaction committed successfully
       return {
         success: true,
-        booking: result,
+        booking: result as unknown as Booking,
         message: 'Booking confirmed successfully',
       }
     } catch (error) {
