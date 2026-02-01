@@ -9,6 +9,7 @@ interface ConcertCardProps {
 }
 
 export const ConcertCard = ({ concert }: ConcertCardProps) => {
+  // Gets cheapest available price for ticket tier. Even though it is hardcoded for vip, front & ga, calculating it so its more future proof
   const minPrice = concert.ticketTiers.reduce((min, tier) => {
     const price = parseFloat(tier.price)
     return price < min ? price : min
