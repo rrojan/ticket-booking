@@ -2,6 +2,7 @@ import Fastify, { type FastifyInstance } from 'fastify'
 import cors from '@fastify/cors'
 import helmet from '@fastify/helmet'
 import { env } from './config/env.js'
+import { registerConcertsRoutes } from './routes/concerts.routes.js'
 
 interface ServerOptions {
   logger?: boolean
@@ -67,12 +68,24 @@ export class Server {
 
   // Register all app's API routes
   private async registerRoutes(): Promise<void> {
+    // Health check endpoint
     this.instance.get('/health-check', async () => ({
       status: 'healthy',
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
       environment: env.NODE_ENV,
     }))
+
+    // Register API routes
+    await registerConcertsRoutes(this.instance)
+
+    // Handle 404
+    this.instance.setNotFoundHandler((request, reply) => {
+      reply.status(404).send({
+        success: false,
+        error: 'Not found',
+      })
+    })
   }
 }
 
