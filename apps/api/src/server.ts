@@ -2,7 +2,6 @@ import Fastify, { type FastifyInstance } from 'fastify'
 import cors from '@fastify/cors'
 import helmet from '@fastify/helmet'
 import { env } from './config/env.js'
-import { ticketsRoutes } from './modules/tickets/tickets.routes.js'
 
 interface ServerOptions {
   logger?: boolean
@@ -74,8 +73,6 @@ export class Server {
       uptime: process.uptime(),
       environment: env.NODE_ENV,
     }))
-
-    await this.instance.register(ticketsRoutes, { prefix: '/tickets' })
   }
 }
 
