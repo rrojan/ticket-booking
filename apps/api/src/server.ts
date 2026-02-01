@@ -39,7 +39,7 @@ export async function createServer(): Promise<FastifyInstance> {
       data: 'Ticket booking API is rolling!',
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
-      envrionment: env.NODE_ENV || 'development',
+      environment: env.NODE_ENV,
     }
   })
 
