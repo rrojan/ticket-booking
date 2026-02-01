@@ -326,6 +326,92 @@ Get user's booking history
 
 # Scaling to Non-Functional Requirements
 
-### Scaling to 99.99% Availability (Four Nines)
+## Scaling to 99.99% Availability (Four Nines)
 
 **Target**: 52 minutes downtime per year from this SLA
+
+#### Database High Availability
+
+- Use a DB provider that supports multi-AZ deployments (e.g., AWS RDS Multi-AZ, Google Cloud SQL HA)
+- Use a DB proxy / LB that supports high volume connection pooling like PgBouncer or HAProxy
+- Implement a (Write) Primary + multiple Read Replica setup with async replication. Setup monitoring for replication lag targeting eventual consistency.
+- Implement automated HA failover with tools like Patroni for automatic primary promotion in < 30s
+- Use read replicas for read-heavy workloads
+- Implement automated backups and point-in-time recovery (PITR)
+
+#### Tradeoffs:
+
+- Increased complexity and cost
+- Replication lag can lead to stale reads (not an issue for our use case as we only need strong consistency for write operations)
+
+### API Server High Availability
+
+- It helps that we are using fastify which supports a much higher rps than traditional frameworks like Express.
+- Setup multiple deployment regions (e.g. US-EAST, EU-WEST, an APAC region) with multiple API servers per region behind a load balancer.
+- Use geo-routing to route users to the nearest region.
+- Implement health checks for each region and automatically remove unhealthy servers / regions from rotation
+- Implement rate limiting to prevent abuse + DDoS protection. We can use something like Cloudflare for this.
+- Implement automated scaling to handle traffic spikes
+- Implement circuit breakers to fail fast on unhealthy dependencies.
+
+We can use something like k8s to orchestrate this with multiple pods per region, auto-scaling, health checks and recovery / auto-healing, etc.
+
+#### Tradeoffs:
+
+- Increased complexity and cost
+- Need to manage multiple regions and deployments, required dedicated DevOps expertise
+
+## Scaling to 1M DAU + 50k Peak Concurrent Users
+
+**Assumptions**:
+
+- 1M DAU with 50k peak is ~5% of users online at a time
+- Peak booking rate would be ~14 requests/sec average, with bursts to 1000+ RPS. Burst traffic is especially common during new ticket releases.
+
+#### 1. Database Performance Optimization
+
+**Current Bottleneck**: `SELECT FOR UPDATE` serializes requests for same tier
+
+Possible Solutions:
+
+##### Database Sharding by Concert
+
+- Can geo-shard, hash-sharding with stable key (e.g. artist_id, venue_id, etc if they are stable), etc.
+
+Benefits:
+
+- No / fewer lock contention
+- Linear scaling (we add more shards as concerts grow)
+
+Trade-off: Cross-concert queries for things like dashboards, analytics,etc become complex (need to query all shards).
+
+##### Indexes for Fast Locking
+
+```sql
+-- Ensure FOR UPDATE uses index (not table scan)
+CREATE INDEX idx_ticket_tiers_id ON ticket_tiers(id);
+CREATE INDEX idx_bookings_idempotency ON bookings(idempotency_key);
+```
+
+Benefit: Lock acquisition <1ms (index seek vs full table scan)
+
+##### Table Partitioning
+
+```sql
+-- Partition bookings by date (for example monthly)
+CREATE TABLE bookings_2026_02 PARTITION OF bookings
+FOR VALUES FROM ('2026-02-01') TO ('2026-03-01');
+```
+
+Benefits:
+
+- Faster queries (smaller tables)
+- Easier archival (drop old partitions)
+
+#### 2. Caching Strategy
+
+- Use Redis for caching hot data like concert details, ticket tier availability, etc
+- Use a cache-aside pattern to keep cache in sync with database
+- Use TTL (Time To Live) to automatically expire stale cache entries
+- Use a proper cache invalidation strategy to proactively remove cache entries when data changes
+- Use CDNs for static assets like images, videos, etc in the `web` app
