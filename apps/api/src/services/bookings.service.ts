@@ -96,7 +96,7 @@ export class BookingsService {
           .returning() // TODO: only select / return needed fields
 
         // If ON CONFLICT was triggered, the booking already exists - fetch it
-        let newBooking = bookingResult[0]
+        const newBooking = bookingResult[0]
         if (!newBooking) {
           const existing = await tx
             .select()
