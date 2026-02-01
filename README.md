@@ -226,3 +226,106 @@ await tx.insert(bookings)
 ```
 
 Even if two concurrent requests pass the pre-check, only one will insert successfully.
+
+## Database Design
+
+Please check `apps/api/src/db/schema/*` for the database schemas. There are three tables here:
+
+- bookings
+- ticketTiers
+- concerts
+
+### Design Decisions
+
+#### 1. `ticketTiers` table instead of `price` column in `concerts` table?
+
+This design allows for flexible ticket pricing strategies and accomodates VIP, frontrow and GA tickets in our requirements.Each tier can have its own availability and pricing, allowing for more fine-tuned control over ticket sales.
+
+#### 2. Numeric Type for Currency
+
+JavaScript's `Number` type uses floating-point arithmetic, which can cause precision errors with currency (0.1 + 0.2 = 0.30000000000000004, the classic example). PostgreSQL's `numeric` type guarantees exact decimal arithmetic. We also store cents instead of dollars to avoid floating point issues and potential precision errors.
+
+#### 3. Separate `total_quantity` and `available_quantity`
+
+```typescript
+totalQuantity: integer().notNull() // Initial inventory (immutable)
+availableQuantity: integer().notNull() // Real-time availability (mutable)
+```
+
+**Why**:
+
+- `totalQuantity` is the source of truth for initial inventory (never changes)
+- `availableQuantity` is decremented on bookings, incremented on cancellations
+- Allows analytics like "How many VIP tickets sold?" = `totalQuantity - availableQuantity`
+
+#### 4. Indexes for Performance
+
+```typescript
+userIdIdx: index('bookings_user_id_idx').on(table.userId)
+ticketTierIdIdx: index('bookings_ticket_tier_id_idx').on(table.ticketTierId)
+```
+
+**Why**:
+
+- `user_id` index: Fast lookup for "My Bookings" page (`SELECT WHERE user_id = ?`)
+- `ticket_tier_id` index: Fast lookup for analytics and availability checks
+- `idempotency_key` index: Automatic (UNIQUE constraint creates index)
+
+## API Design
+
+### REST Endpoints
+
+The API follows RESTful conventions with clear resource naming and HTTP methods
+
+#### Concerts
+
+```http
+GET /concerts
+```
+
+List all concerts with ticket availability
+**Response**: `ConcertWithAvailability[]`
+
+```http
+GET /concerts/:concertId
+```
+
+Get single concert with full tier details
+**Response**: `ConcertWithTiers`
+
+#### Bookings
+
+```http
+POST /bookings
+```
+
+Create a new booking
+**Request Body**:
+
+```json
+{
+  "userId": "user_123",
+  "ticketTierId": "uuid",
+  "quantity": 2,
+  "idempotencyKey": "client-generated-uuid"
+}
+```
+
+**Validation** (Zod schema):
+
+- `quantity`: Integer, 1-10 (prevents bulk buying abuse)
+- `idempotencyKey`: UUID format
+- `ticketTierId`: Valid UUID
+
+```http
+GET /bookings/:userId
+```
+
+Get user's booking history
+**Response**: `BookingWithDetails[]` (includes concert and tier info via JOIN)
+
+# Scaling to Non-Functional Requirements
+
+### Scaling to 99.99% Availability (Four Nines)
+
+**Target**: 52 minutes downtime per year from this SLA
